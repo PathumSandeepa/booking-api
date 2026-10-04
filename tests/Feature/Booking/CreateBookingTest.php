@@ -28,10 +28,10 @@ final class CreateBookingTest extends TestCase
         ]);
 
         $response->assertCreated()
-            ->assertJsonPath('data.name', 'Jane Silva')
-            ->assertJsonPath('data.email', 'jane@example.com')
-            ->assertJsonPath('data.date', $date)
-            ->assertJsonPath('data.slot', '10:00');
+            ->assertJsonPath('name', 'Jane Silva')
+            ->assertJsonPath('email', 'jane@example.com')
+            ->assertJsonPath('date', $date)
+            ->assertJsonPath('slot', '10:00');
 
         $this->assertDatabaseCount('bookings', 1);
     }

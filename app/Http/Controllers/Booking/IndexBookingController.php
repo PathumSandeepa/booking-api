@@ -7,12 +7,14 @@ namespace App\Http\Controllers\Booking;
 use App\Domain\Booking\Actions\ListBookingsAction;
 use App\Http\Requests\Booking\IndexBookingRequest;
 use App\Http\Resources\BookingResource;
-use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Http\JsonResponse;
 
 final class IndexBookingController
 {
-    public function __invoke(IndexBookingRequest $request, ListBookingsAction $listBookings): AnonymousResourceCollection
+    public function __invoke(IndexBookingRequest $request, ListBookingsAction $listBookings): JsonResponse
     {
-        return BookingResource::collection($listBookings($request->filterDate()));
+        $bookings = $listBookings($request->filterDate());
+
+        return new JsonResponse(BookingResource::collection($bookings)->resolve());
     }
 }

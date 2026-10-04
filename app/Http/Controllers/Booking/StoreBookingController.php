@@ -17,8 +17,9 @@ final class StoreBookingController
     {
         $booking = $createBooking(CreateBookingData::fromArray($request->validated()));
 
-        return BookingResource::make($booking)
-            ->response()
-            ->setStatusCode(Response::HTTP_CREATED);
+        return new JsonResponse(
+            BookingResource::make($booking)->resolve(),
+            Response::HTTP_CREATED,
+        );
     }
 }

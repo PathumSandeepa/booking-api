@@ -8,16 +8,19 @@ A small Laravel 13 booking service for appointments in fixed daily slots. Data a
 
 ## Running it locally (Docker)
 
-```bash
-cp .env.example .env
-docker compose up -d
-docker compose exec app composer install
+After cloning, run these commands from the project directory (PowerShell). Docker Desktop must be running:
+
+```powershell
+Copy-Item .env.example .env
+docker compose up -d --build --wait
 docker compose exec app php artisan key:generate
 docker compose exec app php artisan migrate
-docker compose exec app php artisan db:seed   # optional sample data
+docker compose ps
 ```
 
-The API is served on <http://localhost:3000>. The `.env` used by the container points at the `db` service:
+In Windows Command Prompt, replace `Copy-Item .env.example .env` with `copy .env.example .env`; the remaining commands are the same. On macOS/Linux, use `cp .env.example .env`. Run `docker compose exec app php artisan db:seed` only if you want optional sample bookings. The app installs the existing locked Composer dependencies automatically when `vendor/` is missing; you do not need PHP or Composer installed on your host. `--wait` ensures the API is responding before the Artisan commands run. Visit <http://localhost:3000/up> (HTTP 200) or <http://localhost:3000/bookings>.
+
+The `.env` used by the app container points at the Docker `db` service (not `localhost`):
 
 ```env
 DB_CONNECTION=pgsql
@@ -27,6 +30,44 @@ DB_DATABASE=booking
 DB_USERNAME=booking
 DB_PASSWORD=secret
 ```
+
+PostgreSQL 18 stores its data in the `pgdata` Docker volume, so `docker compose down` does not erase bookings. Do **not** use `docker compose down -v` unless you intend to delete the database. If something fails, check `docker compose ps` and `docker compose logs app db` (especially for occupied host ports 3000 or 5433). After changing database settings, run `docker compose exec app php artisan config:clear` and restart the containers.
+
+### Connect to the database
+
+From Command Prompt (or PowerShell), open PostgreSQL's interactive shell without installing `psql` on your computer:
+
+```text
+docker compose exec db psql -U booking -d booking
+```
+
+Inside `psql`, run `\dt` to list tables, `SELECT * FROM bookings;` to inspect bookings, and `\q` to exit. If you already have `psql` installed on your computer, you can instead use `psql -h 127.0.0.1 -p 5433 -U booking -d booking` and enter the development password `secret` when prompted.
+
+In DataGrip, add a **PostgreSQL** data source with host `127.0.0.1`, port `5433`, database `booking`, user `booking`, and password `secret`. Choose **Test Connection** (accept DataGrip's PostgreSQL driver download if prompted), then browse `booking` → `public` → `bookings`. Port 5433 is published only on your computer; containers continue to use `db:5432`. These credentials are for local development only.
+
+### Try the API in Postman
+
+Set a Postman collection variable `baseUrl` to `http://localhost:3000`. No authorization is required. Send these requests with the `Accept: application/json` header:
+
+1. `GET {{baseUrl}}/up` → HTTP `200` (health check).
+2. `POST {{baseUrl}}/bookings` → HTTP `201`. Select **Body → raw → JSON** (Postman sets `Content-Type: application/json`) and use:
+
+    ```json
+    {
+        "name": "Jane Silva",
+        "email": "jane@example.com",
+        "date": "2026-10-06",
+        "slot": "10:00"
+    }
+    ```
+
+    Replace the example date with **today or any date within the next 90 days** when testing later. Slots are hourly from `09:00` through `17:00`.
+
+3. `GET {{baseUrl}}/bookings` → HTTP `200`, a plain JSON array containing your new booking.
+4. `GET {{baseUrl}}/bookings?date=2026-10-06` → HTTP `200` for a date that has bookings. The `date` query parameter is a plain string in `YYYY-MM-DD` (year-month-day) form, so `2026-10-06` means 6 October 2026. A valid date with no bookings returns `404`, and a wrong format such as `06-10-2026` returns `422`.
+5. `DELETE {{baseUrl}}/bookings/<id>` → HTTP `200`, replacing `<id>` with the `id` from the POST response. Posting the same date and slot twice instead returns `409`; invalid input returns `422`.
+
+Responses are not wrapped in a `data` envelope: creating returns the booking object directly, and listing returns an array of booking objects.
 
 ### Running it without Docker
 
@@ -91,14 +132,12 @@ Responses:
 
 ```json
 {
-    "data": {
-        "id": "01m43j754r5gz00bkr51trey7r",
-        "name": "Jane Silva",
-        "email": "jane@example.com",
-        "date": "2026-12-15",
-        "slot": "10:00",
-        "created_at": "2026-10-04T13:38:54+00:00"
-    }
+    "id": "01m43j754r5gz00bkr51trey7r",
+    "name": "Jane Silva",
+    "email": "jane@example.com",
+    "date": "2026-12-15",
+    "slot": "10:00",
+    "created_at": "2026-10-04T13:38:54+00:00"
 }
 ```
 
@@ -113,20 +152,41 @@ A conflict looks like this:
 
 ### GET /bookings
 
-Optional `?date=YYYY-MM-DD` filter. Returns `200 OK` with bookings ordered by date then slot, or `422` if the filter is not a valid `YYYY-MM-DD` date.
+Optional `?date=YYYY-MM-DD` filter. Responses:
+
+- `200 OK` with bookings ordered by date then slot
+- `404 Not Found` when a valid date filter matches no bookings
+- `422 Unprocessable Content` when the filter is not a valid `YYYY-MM-DD` date
+
+Without a filter, an empty database returns `200` with `[]`.
+
+```json
+[
+    {
+        "id": "01m43j754r5gz00bkr51trey7r",
+        "name": "Jane Silva",
+        "email": "jane@example.com",
+        "date": "2026-12-15",
+        "slot": "10:00",
+        "created_at": "2026-10-04T13:38:54+00:00"
+    }
+]
+```
+
+A date with no bookings returns `404`:
+
+```json
+{ "message": "No bookings found for 2026-12-16." }
+```
+
+A malformed filter such as `?date=15-12-2026` returns `422` and is logged as a warning:
 
 ```json
 {
-    "data": [
-        {
-            "id": "01m43j754r5gz00bkr51trey7r",
-            "name": "Jane Silva",
-            "email": "jane@example.com",
-            "date": "2026-12-15",
-            "slot": "10:00",
-            "created_at": "2026-10-04T13:38:54+00:00"
-        }
-    ]
+    "message": "The date filter must use the YYYY-MM-DD format, for example 2026-10-05.",
+    "errors": {
+        "date": ["The date filter must use the YYYY-MM-DD format, for example 2026-10-05."]
+    }
 }
 ```
 
@@ -150,6 +210,8 @@ Returns `200 OK` when the booking existed, `404 Not Found` otherwise:
 - A booking may be made for **today** — only dates strictly in the past are rejected.
 - Bookings are limited to **90 days** ahead (`BOOKING_MAX_ADVANCE_DAYS`), to stop obviously unrealistic dates.
 - Emails are lowercased and names trimmed before storage, so `Jane@Example.com` and `jane@example.com` are stored identically.
+- **Responses are unwrapped.** Creating returns the booking object, listing returns an array. There is no `data` envelope.
+- A `?date=` filter that matches nothing is treated as **not found** (`404`) rather than an empty list, so a client can tell "no bookings that day" apart from an unfiltered empty list. Listing without a filter still returns `200` with `[]`.
 - There is no authentication; the endpoints are public and only rate limited (`BOOKING_RATE_LIMIT`, default 60 requests/minute).
 - Cancellation is a hard delete. There is no audit trail.
 
@@ -247,17 +309,19 @@ A few things that cost me time and are worth recording.
 
 ## Self-testing
 
-The supplied `Booking-API.postman_collection.json` collection runs against `http://localhost:3000`. All eight requests behave as expected:
+The following scenarios can be tested against `http://localhost:3000` with Postman:
 
-| #   | Request                  | Result |
-| --- | ------------------------ | ------ |
-| 1   | Create booking           | `201`  |
-| 2   | Conflicting date + slot  | `409`  |
-| 3   | Missing / invalid fields | `422`  |
-| 4   | Date in the past         | `422`  |
-| 5   | List all                 | `200`  |
-| 6   | List filtered by date    | `200`  |
-| 7   | Delete existing booking  | `200`  |
-| 8   | Delete unknown id        | `404`  |
+| #   | Request                                       | Result |
+| --- | --------------------------------------------- | ------ |
+| 1   | Create booking                                | `201`  |
+| 2   | Conflicting date + slot                       | `409`  |
+| 3   | Missing / invalid fields                      | `422`  |
+| 4   | Date in the past                              | `422`  |
+| 5   | List all                                      | `200`  |
+| 6   | List filtered by a date that has bookings     | `200`  |
+| 7   | Delete existing booking                       | `200`  |
+| 8   | Delete unknown id                             | `404`  |
+| 9   | List filtered by a date with no bookings      | `404`  |
+| 10  | List filtered by a malformed date             | `422`  |
 
-For request 7, copy the `id` from request 1's response into the `bookingId` collection variable.
+For request 7, copy the `id` from request 1's response into the DELETE URL. Run request 6 before request 7, because deleting the only booking for that date makes the filter return `404`.
