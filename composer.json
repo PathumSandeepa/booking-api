@@ -3,7 +3,10 @@
     "name": "laravel/laravel",
     "type": "project",
     "description": "The skeleton application for the Laravel framework.",
-    "keywords": ["laravel", "framework"],
+    "keywords": [
+        "laravel",
+        "framework"
+    ],
     "license": "MIT",
     "require": {
         "php": "^8.3",
@@ -47,8 +50,8 @@
             "@php artisan test"
         ],
         "post-autoload-dump": [
+            "@php -r \"foreach (['bootstrap/cache', 'storage/app/private', 'storage/app/public', 'storage/framework/cache/data', 'storage/framework/sessions', 'storage/framework/testing', 'storage/framework/views', 'storage/logs'] as \\$d) { is_dir(\\$d) || mkdir(\\$d, 0775, true); }\"",
             "Illuminate\\Foundation\\ComposerScripts::postAutoloadDump",
-            "@php -r \"foreach (['bootstrap/cache', 'storage/app/private', 'storage/app/public', 'storage/framework/cache/data', 'storage/framework/sessions', 'storage/framework/testing', 'storage/framework/views', 'storage/logs'] as $d) { is_dir($d) || mkdir($d, 0775, true); }\"",
             "@php artisan package:discover --ansi"
         ],
         "post-update-cmd": [
