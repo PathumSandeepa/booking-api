@@ -65,7 +65,8 @@ Set a Postman collection variable `baseUrl` to `http://localhost:3000`. No autho
 
 3. `GET {{baseUrl}}/bookings` → HTTP `200`, a plain JSON array containing your new booking.
 4. `GET {{baseUrl}}/bookings?date=2026-10-06` → HTTP `200` for a date that has bookings. The `date` query parameter is a plain string in `YYYY-MM-DD` (year-month-day) form, so `2026-10-06` means 6 October 2026. A valid date with no bookings returns `404`, and a wrong format such as `06-10-2026` returns `422`.
-5. `DELETE {{baseUrl}}/bookings/<id>` → HTTP `200`, replacing `<id>` with the `id` from the POST response. Posting the same date and slot twice instead returns `409`; invalid input returns `422`.
+5. `PUT {{baseUrl}}/bookings/<id>` → HTTP `200`. Body is just the new schedule: `{"date": "2026-10-08", "slot": "16:00"}`. Moving onto a slot another booking holds returns `409`.
+6. `DELETE {{baseUrl}}/bookings/<id>` → HTTP `200`, replacing `<id>` with the `id` from the POST response. Posting the same date and slot twice instead returns `409`; invalid input returns `422`.
 
 Responses are not wrapped in a `data` envelope: creating returns the booking object directly, and listing returns an array of booking objects.
 
@@ -83,17 +84,31 @@ SQLite works out of the box: set `DB_CONNECTION=sqlite` and create `database/dat
 
 ### Tests
 
+Run the whole suite:
+
 ```bash
-docker compose exec app php artisan test   # or: php artisan test
+docker compose exec app php artisan test
 ```
+
+Run a single file, a single test, or a whole suite:
+
+```bash
+docker compose exec app php artisan test tests/Feature/Booking/RescheduleBookingTest.php
+docker compose exec app php artisan test --filter=it_reschedules_a_booking_to_a_free_slot
+docker compose exec app php artisan test --testsuite=Unit
+```
+
+Without Docker, drop the `docker compose exec app` prefix and run `php artisan test` directly.
 
 Tests run against an in-memory SQLite database, so they need no external services.
 
 - `tests/Feature/Booking/CreateBookingTest.php` — success, double-booking, same slot on another date, missing fields, past date, unknown slot, today, beyond the booking window.
 - `tests/Feature/Booking/ListBookingsTest.php` — list all, filter by date, empty result, malformed filter.
 - `tests/Feature/Booking/CancelBookingTest.php` — cancel, unknown id, slot freed after cancelling.
+- `tests/Feature/Booking/RescheduleBookingTest.php` — reschedule, name/email untouched, own slot allowed, conflict with another booking, old slot freed, unknown id, missing fields, past date, beyond window, unknown slot.
 - `tests/Feature/Booking/ConcurrentBookingTest.php` — the unique constraint, and two identical requests.
 - `tests/Unit/Booking/CreateBookingActionTest.php` — the action against a mocked repository, no database.
+- `tests/Unit/Booking/RescheduleBookingActionTest.php` — the reschedule action against a mocked repository, including that it excludes itself from the availability check.
 
 ### Formatting
 
@@ -111,6 +126,7 @@ Base URL: `http://localhost:3000`
 | ------ | ---------------- | ------------------------------------------ |
 | POST   | `/bookings`      | Create a booking                           |
 | GET    | `/bookings`      | List bookings, optional `?date=YYYY-MM-DD` |
+| PUT    | `/bookings/{id}` | Reschedule a booking to a new date + slot  |
 | DELETE | `/bookings/{id}` | Cancel a booking                           |
 
 ### POST /bookings
@@ -144,9 +160,17 @@ Responses:
 A conflict looks like this:
 
 ```json
+{ "message": "The 10:00 slot on 2026-12-15 is already booked." }
+```
+
+Validation failures use a generic top-level `message` and put the detail under `errors`, one entry per field:
+
+```json
 {
-    "message": "The 10:00 slot on 2026-12-15 is already booked.",
-    "errors": { "slot": ["The 10:00 slot on 2026-12-15 is already booked."] }
+    "message": "The given data was invalid.",
+    "errors": {
+        "slot": ["The slot field is required."]
+    }
 }
 ```
 
@@ -183,7 +207,7 @@ A malformed filter such as `?date=15-12-2026` returns `422` and is logged as a w
 
 ```json
 {
-    "message": "The date filter must use the YYYY-MM-DD format, for example 2026-10-05.",
+    "message": "The given data was invalid.",
     "errors": {
         "date": [
             "The date filter must use the YYYY-MM-DD format, for example 2026-10-05."
@@ -191,6 +215,37 @@ A malformed filter such as `?date=15-12-2026` returns `422` and is logged as a w
     }
 }
 ```
+
+### PUT /bookings/{id}
+
+Moves an existing booking to a new date and slot. Only the schedule changes; the name and email stay as they were, so the body carries just the two fields:
+
+```json
+{
+    "date": "2026-12-20",
+    "slot": "16:00"
+}
+```
+
+Responses:
+
+- `200 OK` with the updated booking
+- `404 Not Found` when the id does not exist
+- `409 Conflict` when the target date + slot belongs to another booking
+- `422 Unprocessable Content` for validation failures
+
+```json
+{
+    "id": "01m43j754r5gz00bkr51trey7r",
+    "name": "Jane Silva",
+    "email": "jane@example.com",
+    "date": "2026-12-20",
+    "slot": "16:00",
+    "created_at": "2026-10-04T13:38:54+00:00"
+}
+```
+
+The date and slot rules are identical to `POST /bookings`. Sending a booking's own current date and slot succeeds rather than conflicting with itself, and the previous slot becomes free immediately.
 
 ### DELETE /bookings/{id}
 
@@ -213,6 +268,7 @@ Returns `200 OK` when the booking existed, `404 Not Found` otherwise:
 - Bookings are limited to **90 days** ahead (`BOOKING_MAX_ADVANCE_DAYS`), to stop obviously unrealistic dates.
 - Emails are lowercased and names trimmed before storage, so `Jane@Example.com` and `jane@example.com` are stored identically.
 - **Responses are unwrapped.** Creating returns the booking object, listing returns an array. There is no `data` envelope.
+- **Errors never repeat themselves.** Single-fault errors (`404`, `409`) return just a `message`. Validation failures (`422`) return a generic `message` plus an `errors` map, so the per-field detail appears once rather than being copied into the top-level message.
 - A `?date=` filter that matches nothing is treated as **not found** (`404`) rather than an empty list, so a client can tell "no bookings that day" apart from an unfiltered empty list. Listing without a filter still returns `200` with `[]`.
 - There is no authentication; the endpoints are public and only rate limited (`BOOKING_RATE_LIMIT`, default 60 requests/minute).
 - Cancellation is a hard delete. There is no audit trail.
@@ -222,18 +278,19 @@ Returns `200 OK` when the booking existed, `404 Not Found` otherwise:
 ```
 app/
   Domain/Booking/
-    Actions/              CreateBookingAction, ListBookingsAction, CancelBookingAction
-    DataTransferObjects/  CreateBookingData
+    Actions/              CreateBookingAction, ListBookingsAction, RescheduleBookingAction, CancelBookingAction
+    DataTransferObjects/  CreateBookingData, RescheduleBookingData
     Enums/                BookingSlot
-    Exceptions/           SlotAlreadyBookedException, BookingNotFoundException
+    Exceptions/           SlotAlreadyBookedException, BookingNotFoundException, NoBookingsForDateException
     Models/               Booking
     Repositories/         BookingRepository (interface)
   Infrastructure/Booking/
     Repositories/         EloquentBookingRepository (implementation)
   Http/
-    Controllers/Booking/  StoreBookingController, IndexBookingController, DestroyBookingController
+    Controllers/Booking/  StoreBookingController, IndexBookingController, UpdateBookingController, DestroyBookingController
     Middleware/           ForceJsonResponse
-    Requests/Booking/     StoreBookingRequest, IndexBookingRequest
+    Requests/Booking/     StoreBookingRequest, IndexBookingRequest, UpdateBookingRequest
+                          Concerns/ValidatesBookingSchedule
     Resources/            BookingResource
   Providers/              RepositoryServiceProvider
 ```
@@ -252,8 +309,10 @@ Controllers are single-action (`__invoke`) classes. Each one does three things a
 
 ```php
 public function all(?CarbonImmutable $date = null): Collection;
-public function existsForSlot(CarbonImmutable $date, BookingSlot $slot): bool;
+public function findById(string $id): ?Booking;
+public function existsForSlot(CarbonImmutable $date, BookingSlot $slot, ?string $ignoreBookingId = null): bool;
 public function create(CreateBookingData $data): Booking;
+public function reschedule(Booking $booking, RescheduleBookingData $data): Booking;
 public function deleteById(string $id): bool;
 ```
 
@@ -321,9 +380,12 @@ The following scenarios can be tested against `http://localhost:3000` with Postm
 | 4   | Date in the past                          | `422`  |
 | 5   | List all                                  | `200`  |
 | 6   | List filtered by a date that has bookings | `200`  |
-| 7   | Delete existing booking                   | `200`  |
-| 8   | Delete unknown id                         | `404`  |
-| 9   | List filtered by a date with no bookings  | `404`  |
-| 10  | List filtered by a malformed date         | `422`  |
+| 7   | Reschedule a booking                      | `200`  |
+| 8   | Reschedule onto a taken slot              | `409`  |
+| 9   | Reschedule an unknown id                  | `404`  |
+| 10  | Delete existing booking                   | `200`  |
+| 11  | Delete unknown id                         | `404`  |
+| 12  | List filtered by a date with no bookings  | `404`  |
+| 13  | List filtered by a malformed date         | `422`  |
 
-For request 7, copy the `id` from request 1's response into the DELETE URL. Run request 6 before request 7, because deleting the only booking for that date makes the filter return `404`.
+For requests 7 and 10, copy the `id` from request 1's response into the URL. Run request 6 before request 10, because deleting the only booking for that date makes the filter return `404`.

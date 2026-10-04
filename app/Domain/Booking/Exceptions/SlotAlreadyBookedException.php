@@ -28,9 +28,6 @@ final class SlotAlreadyBookedException extends RuntimeException
     {
         return new JsonResponse([
             'message' => $this->getMessage(),
-            'errors' => [
-                'slot' => [$this->getMessage()],
-            ],
         ], Response::HTTP_CONFLICT);
     }
 }

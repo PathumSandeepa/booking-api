@@ -49,7 +49,9 @@ final class CreateBookingTest extends TestCase
             'slot' => '10:00',
         ]);
 
-        $response->assertConflict()->assertJsonStructure(['message', 'errors' => ['slot']]);
+        $response->assertConflict()
+            ->assertJsonPath('message', 'The 10:00 slot on '.$date.' is already booked.')
+            ->assertJsonMissingPath('errors');
 
         $this->assertDatabaseCount('bookings', 1);
     }

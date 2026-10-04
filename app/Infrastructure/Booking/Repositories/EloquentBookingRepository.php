@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Infrastructure\Booking\Repositories;
 
 use App\Domain\Booking\DataTransferObjects\CreateBookingData;
+use App\Domain\Booking\DataTransferObjects\RescheduleBookingData;
 use App\Domain\Booking\Enums\BookingSlot;
 use App\Domain\Booking\Exceptions\SlotAlreadyBookedException;
 use App\Domain\Booking\Models\Booking;
@@ -24,11 +25,17 @@ final class EloquentBookingRepository implements BookingRepository
             ->get();
     }
 
-    public function existsForSlot(CarbonImmutable $date, BookingSlot $slot): bool
+    public function findById(string $id): ?Booking
+    {
+        return Booking::query()->whereKey($id)->first();
+    }
+
+    public function existsForSlot(CarbonImmutable $date, BookingSlot $slot, ?string $ignoreBookingId = null): bool
     {
         return Booking::query()
             ->whereDate('date', $date->toDateString())
             ->where('slot', $slot->value)
+            ->when($ignoreBookingId, fn ($query, string $id) => $query->whereKeyNot($id))
             ->exists();
     }
 
@@ -49,5 +56,19 @@ final class EloquentBookingRepository implements BookingRepository
     public function deleteById(string $id): bool
     {
         return Booking::query()->whereKey($id)->delete() > 0;
+    }
+
+    public function reschedule(Booking $booking, RescheduleBookingData $data): Booking
+    {
+        try {
+            $booking->update([
+                'date' => $data->date->toDateString(),
+                'slot' => $data->slot->value,
+            ]);
+        } catch (UniqueConstraintViolationException) {
+            throw new SlotAlreadyBookedException($data->date, $data->slot);
+        }
+
+        return $booking->refresh();
     }
 }

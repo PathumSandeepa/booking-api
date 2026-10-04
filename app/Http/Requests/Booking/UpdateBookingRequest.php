@@ -7,17 +7,13 @@ namespace App\Http\Requests\Booking;
 use App\Http\Requests\Booking\Concerns\ValidatesBookingSchedule;
 use Illuminate\Foundation\Http\FormRequest;
 
-final class StoreBookingRequest extends FormRequest
+final class UpdateBookingRequest extends FormRequest
 {
     use ValidatesBookingSchedule;
 
     public function rules(): array
     {
-        return [
-            'name' => ['required', 'string', 'min:2', 'max:255'],
-            'email' => ['required', 'string', 'email:rfc', 'max:255'],
-            ...$this->scheduleRules(),
-        ];
+        return $this->scheduleRules();
     }
 
     public function messages(): array
