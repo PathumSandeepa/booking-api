@@ -185,7 +185,9 @@ A malformed filter such as `?date=15-12-2026` returns `422` and is logged as a w
 {
     "message": "The date filter must use the YYYY-MM-DD format, for example 2026-10-05.",
     "errors": {
-        "date": ["The date filter must use the YYYY-MM-DD format, for example 2026-10-05."]
+        "date": [
+            "The date filter must use the YYYY-MM-DD format, for example 2026-10-05."
+        ]
     }
 }
 ```
@@ -311,17 +313,17 @@ A few things that cost me time and are worth recording.
 
 The following scenarios can be tested against `http://localhost:3000` with Postman:
 
-| #   | Request                                       | Result |
-| --- | --------------------------------------------- | ------ |
-| 1   | Create booking                                | `201`  |
-| 2   | Conflicting date + slot                       | `409`  |
-| 3   | Missing / invalid fields                      | `422`  |
-| 4   | Date in the past                              | `422`  |
-| 5   | List all                                      | `200`  |
-| 6   | List filtered by a date that has bookings     | `200`  |
-| 7   | Delete existing booking                       | `200`  |
-| 8   | Delete unknown id                             | `404`  |
-| 9   | List filtered by a date with no bookings      | `404`  |
-| 10  | List filtered by a malformed date             | `422`  |
+| #   | Request                                   | Result |
+| --- | ----------------------------------------- | ------ |
+| 1   | Create booking                            | `201`  |
+| 2   | Conflicting date + slot                   | `409`  |
+| 3   | Missing / invalid fields                  | `422`  |
+| 4   | Date in the past                          | `422`  |
+| 5   | List all                                  | `200`  |
+| 6   | List filtered by a date that has bookings | `200`  |
+| 7   | Delete existing booking                   | `200`  |
+| 8   | Delete unknown id                         | `404`  |
+| 9   | List filtered by a date with no bookings  | `404`  |
+| 10  | List filtered by a malformed date         | `422`  |
 
 For request 7, copy the `id` from request 1's response into the DELETE URL. Run request 6 before request 7, because deleting the only booking for that date makes the filter return `404`.
