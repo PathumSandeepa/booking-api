@@ -1,9 +1,0 @@
-{
-    "editor.insertSpaces": true,
-    "editor.tabSize": 4,
-    "editor.detectIndentation": false,
-    "[php]": {
-        "editor.defaultFormatter": null,
-        "editor.formatOnSave": false
-    }
-}

@@ -4,8 +4,7 @@
 .env.production
 .phpunit.result.cache
 /.phpunit.cache
-/.vscode/*
-!/.vscode/settings.json
+/.vscode/
 /bootstrap/cache/*
 /database/*.sqlite*
 /public/storage
