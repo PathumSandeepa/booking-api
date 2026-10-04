@@ -1,0 +1,17 @@
+*.log
+.env
+.env.backup
+.env.production
+.phpunit.result.cache
+/.phpunit.cache
+/.vscode/*
+!/.vscode/settings.json
+/bootstrap/cache/*
+/database/*.sqlite*
+/public/storage
+/storage/app/*
+/storage/framework/*
+/storage/logs/*
+/storage/*.key
+/storage/pail
+/vendor
