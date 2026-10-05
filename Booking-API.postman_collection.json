@@ -1,0 +1,778 @@
+{
+    "info": {
+        "name": "Booking API — ASE Take-Home",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    },
+    "variable": [
+        {
+            "key": "baseUrl",
+            "value": "http://localhost:3000"
+        },
+        {
+            "key": "bookingId",
+            "value": ""
+        },
+        {
+            "key": "secondBookingId",
+            "value": ""
+        }
+    ],
+    "event": [
+        {
+            "listen": "prerequest",
+            "script": {
+                "type": "text/javascript",
+                "exec": [
+                    "const isoDate = (daysAhead) => {",
+                    "    const now = new Date();",
+                    "    const target = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + daysAhead));",
+                    "    return target.toISOString().slice(0, 10);",
+                    "};",
+                    "",
+                    "pm.collectionVariables.set('bookingDate', isoDate(30));",
+                    "pm.collectionVariables.set('rescheduleDate', isoDate(31));",
+                    "pm.collectionVariables.set('emptyDate', isoDate(45));"
+                ]
+            }
+        }
+    ],
+    "item": [
+        {
+            "name": "Health check",
+            "request": {
+                "method": "GET",
+                "header": [
+                    {
+                        "key": "Accept",
+                        "value": "application/json"
+                    }
+                ],
+                "url": {
+                    "raw": "{{baseUrl}}/up",
+                    "host": ["{{baseUrl}}"],
+                    "path": ["up"]
+                }
+            },
+            "event": [
+                {
+                    "listen": "test",
+                    "script": {
+                        "type": "text/javascript",
+                        "exec": [
+                            "pm.test('returns 200', function () {",
+                            "    pm.response.to.have.status(200);",
+                            "});"
+                        ]
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Create a booking",
+            "request": {
+                "method": "POST",
+                "header": [
+                    {
+                        "key": "Accept",
+                        "value": "application/json"
+                    },
+                    {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                    }
+                ],
+                "body": {
+                    "mode": "raw",
+                    "raw": "{\n    \"name\": \"Jane Silva\",\n    \"email\": \"jane@example.com\",\n    \"date\": \"{{bookingDate}}\",\n    \"slot\": \"10:00\"\n}"
+                },
+                "url": {
+                    "raw": "{{baseUrl}}/bookings",
+                    "host": ["{{baseUrl}}"],
+                    "path": ["bookings"]
+                }
+            },
+            "event": [
+                {
+                    "listen": "test",
+                    "script": {
+                        "type": "text/javascript",
+                        "exec": [
+                            "pm.test('returns 201', function () {",
+                            "    pm.response.to.have.status(201);",
+                            "});",
+                            "",
+                            "const body = pm.response.json();",
+                            "",
+                            "pm.test('returns the created booking', function () {",
+                            "    pm.expect(body.name).to.eql('Jane Silva');",
+                            "    pm.expect(body.email).to.eql('jane@example.com');",
+                            "    pm.expect(body.date).to.eql(pm.collectionVariables.get('bookingDate'));",
+                            "    pm.expect(body.slot).to.eql('10:00');",
+                            "});",
+                            "",
+                            "pm.collectionVariables.set('bookingId', body.id);"
+                        ]
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Create a conflicting booking (same date and slot)",
+            "request": {
+                "method": "POST",
+                "header": [
+                    {
+                        "key": "Accept",
+                        "value": "application/json"
+                    },
+                    {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                    }
+                ],
+                "body": {
+                    "mode": "raw",
+                    "raw": "{\n    \"name\": \"John Marsh\",\n    \"email\": \"john@example.com\",\n    \"date\": \"{{bookingDate}}\",\n    \"slot\": \"10:00\"\n}"
+                },
+                "url": {
+                    "raw": "{{baseUrl}}/bookings",
+                    "host": ["{{baseUrl}}"],
+                    "path": ["bookings"]
+                }
+            },
+            "event": [
+                {
+                    "listen": "test",
+                    "script": {
+                        "type": "text/javascript",
+                        "exec": [
+                            "pm.test('returns 409', function () {",
+                            "    pm.response.to.have.status(409);",
+                            "});",
+                            "",
+                            "pm.test('explains the slot is taken', function () {",
+                            "    pm.expect(pm.response.json().message).to.include('is already booked');",
+                            "});"
+                        ]
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Create a booking with missing or invalid fields",
+            "request": {
+                "method": "POST",
+                "header": [
+                    {
+                        "key": "Accept",
+                        "value": "application/json"
+                    },
+                    {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                    }
+                ],
+                "body": {
+                    "mode": "raw",
+                    "raw": "{\n    \"name\": \"\",\n    \"email\": \"not-an-email\",\n    \"date\": \"{{bookingDate}}\"\n}"
+                },
+                "url": {
+                    "raw": "{{baseUrl}}/bookings",
+                    "host": ["{{baseUrl}}"],
+                    "path": ["bookings"]
+                }
+            },
+            "event": [
+                {
+                    "listen": "test",
+                    "script": {
+                        "type": "text/javascript",
+                        "exec": [
+                            "pm.test('returns 422', function () {",
+                            "    pm.response.to.have.status(422);",
+                            "});",
+                            "",
+                            "pm.test('reports each invalid field', function () {",
+                            "    const errors = pm.response.json().errors;",
+                            "    pm.expect(errors).to.have.property('name');",
+                            "    pm.expect(errors).to.have.property('email');",
+                            "    pm.expect(errors).to.have.property('slot');",
+                            "});"
+                        ]
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Create a booking for a date in the past",
+            "request": {
+                "method": "POST",
+                "header": [
+                    {
+                        "key": "Accept",
+                        "value": "application/json"
+                    },
+                    {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                    }
+                ],
+                "body": {
+                    "mode": "raw",
+                    "raw": "{\n    \"name\": \"Jane Silva\",\n    \"email\": \"jane@example.com\",\n    \"date\": \"2020-01-01\",\n    \"slot\": \"10:00\"\n}"
+                },
+                "url": {
+                    "raw": "{{baseUrl}}/bookings",
+                    "host": ["{{baseUrl}}"],
+                    "path": ["bookings"]
+                }
+            },
+            "event": [
+                {
+                    "listen": "test",
+                    "script": {
+                        "type": "text/javascript",
+                        "exec": [
+                            "pm.test('returns 422', function () {",
+                            "    pm.response.to.have.status(422);",
+                            "});",
+                            "",
+                            "pm.test('reports the date field', function () {",
+                            "    pm.expect(pm.response.json().errors).to.have.property('date');",
+                            "});"
+                        ]
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Create a booking for an unknown slot",
+            "request": {
+                "method": "POST",
+                "header": [
+                    {
+                        "key": "Accept",
+                        "value": "application/json"
+                    },
+                    {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                    }
+                ],
+                "body": {
+                    "mode": "raw",
+                    "raw": "{\n    \"name\": \"Jane Silva\",\n    \"email\": \"jane@example.com\",\n    \"date\": \"{{bookingDate}}\",\n    \"slot\": \"03:30\"\n}"
+                },
+                "url": {
+                    "raw": "{{baseUrl}}/bookings",
+                    "host": ["{{baseUrl}}"],
+                    "path": ["bookings"]
+                }
+            },
+            "event": [
+                {
+                    "listen": "test",
+                    "script": {
+                        "type": "text/javascript",
+                        "exec": [
+                            "pm.test('returns 422', function () {",
+                            "    pm.response.to.have.status(422);",
+                            "});",
+                            "",
+                            "pm.test('lists the valid slots', function () {",
+                            "    pm.expect(pm.response.json().errors.slot[0]).to.include('09:00');",
+                            "});"
+                        ]
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Create a second booking on the same date",
+            "request": {
+                "method": "POST",
+                "header": [
+                    {
+                        "key": "Accept",
+                        "value": "application/json"
+                    },
+                    {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                    }
+                ],
+                "body": {
+                    "mode": "raw",
+                    "raw": "{\n    \"name\": \"John Marsh\",\n    \"email\": \"john@example.com\",\n    \"date\": \"{{bookingDate}}\",\n    \"slot\": \"11:00\"\n}"
+                },
+                "url": {
+                    "raw": "{{baseUrl}}/bookings",
+                    "host": ["{{baseUrl}}"],
+                    "path": ["bookings"]
+                }
+            },
+            "event": [
+                {
+                    "listen": "test",
+                    "script": {
+                        "type": "text/javascript",
+                        "exec": [
+                            "pm.test('returns 201', function () {",
+                            "    pm.response.to.have.status(201);",
+                            "});",
+                            "",
+                            "const body = pm.response.json();",
+                            "",
+                            "pm.test('returns the created booking', function () {",
+                            "    pm.expect(body.date).to.eql(pm.collectionVariables.get('bookingDate'));",
+                            "    pm.expect(body.slot).to.eql('11:00');",
+                            "});",
+                            "",
+                            "pm.collectionVariables.set('secondBookingId', body.id);"
+                        ]
+                    }
+                }
+            ]
+        },
+        {
+            "name": "List all bookings",
+            "request": {
+                "method": "GET",
+                "header": [
+                    {
+                        "key": "Accept",
+                        "value": "application/json"
+                    }
+                ],
+                "url": {
+                    "raw": "{{baseUrl}}/bookings",
+                    "host": ["{{baseUrl}}"],
+                    "path": ["bookings"]
+                }
+            },
+            "event": [
+                {
+                    "listen": "test",
+                    "script": {
+                        "type": "text/javascript",
+                        "exec": [
+                            "pm.test('returns 200', function () {",
+                            "    pm.response.to.have.status(200);",
+                            "});",
+                            "",
+                            "const body = pm.response.json();",
+                            "",
+                            "pm.test('returns a plain array with both bookings', function () {",
+                            "    pm.expect(body).to.be.an('array');",
+                            "    pm.expect(body.length).to.be.at.least(2);",
+                            "});"
+                        ]
+                    }
+                }
+            ]
+        },
+        {
+            "name": "List bookings filtered by date",
+            "request": {
+                "method": "GET",
+                "header": [
+                    {
+                        "key": "Accept",
+                        "value": "application/json"
+                    }
+                ],
+                "url": {
+                    "raw": "{{baseUrl}}/bookings?date={{bookingDate}}",
+                    "host": ["{{baseUrl}}"],
+                    "path": ["bookings"],
+                    "query": [
+                        {
+                            "key": "date",
+                            "value": "{{bookingDate}}"
+                        }
+                    ]
+                }
+            },
+            "event": [
+                {
+                    "listen": "test",
+                    "script": {
+                        "type": "text/javascript",
+                        "exec": [
+                            "pm.test('returns 200', function () {",
+                            "    pm.response.to.have.status(200);",
+                            "});",
+                            "",
+                            "const body = pm.response.json();",
+                            "const date = pm.collectionVariables.get('bookingDate');",
+                            "",
+                            "pm.test('every booking is on the requested date', function () {",
+                            "    pm.expect(body).to.be.an('array');",
+                            "    body.forEach(function (booking) {",
+                            "        pm.expect(booking.date).to.eql(date);",
+                            "    });",
+                            "});"
+                        ]
+                    }
+                }
+            ]
+        },
+        {
+            "name": "List bookings for a date with no bookings (should return an empty list)",
+            "request": {
+                "method": "GET",
+                "header": [
+                    {
+                        "key": "Accept",
+                        "value": "application/json"
+                    }
+                ],
+                "url": {
+                    "raw": "{{baseUrl}}/bookings?date={{emptyDate}}",
+                    "host": ["{{baseUrl}}"],
+                    "path": ["bookings"],
+                    "query": [
+                        {
+                            "key": "date",
+                            "value": "{{emptyDate}}"
+                        }
+                    ]
+                }
+            },
+            "event": [
+                {
+                    "listen": "test",
+                    "script": {
+                        "type": "text/javascript",
+                        "exec": [
+                            "pm.test('returns 200', function () {",
+                            "    pm.response.to.have.status(200);",
+                            "});",
+                            "",
+                            "pm.test('returns an empty array', function () {",
+                            "    const body = pm.response.json();",
+                            "    pm.expect(body).to.be.an('array');",
+                            "    pm.expect(body).to.have.lengthOf(0);",
+                            "});"
+                        ]
+                    }
+                }
+            ]
+        },
+        {
+            "name": "List bookings with a malformed date filter",
+            "request": {
+                "method": "GET",
+                "header": [
+                    {
+                        "key": "Accept",
+                        "value": "application/json"
+                    }
+                ],
+                "url": {
+                    "raw": "{{baseUrl}}/bookings?date=15-12-2026",
+                    "host": ["{{baseUrl}}"],
+                    "path": ["bookings"],
+                    "query": [
+                        {
+                            "key": "date",
+                            "value": "15-12-2026"
+                        }
+                    ]
+                }
+            },
+            "event": [
+                {
+                    "listen": "test",
+                    "script": {
+                        "type": "text/javascript",
+                        "exec": [
+                            "pm.test('returns 422', function () {",
+                            "    pm.response.to.have.status(422);",
+                            "});",
+                            "",
+                            "pm.test('explains the expected format', function () {",
+                            "    pm.expect(pm.response.json().errors.date[0]).to.include('YYYY-MM-DD');",
+                            "});"
+                        ]
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Reschedule a booking onto a taken slot",
+            "request": {
+                "method": "PUT",
+                "header": [
+                    {
+                        "key": "Accept",
+                        "value": "application/json"
+                    },
+                    {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                    }
+                ],
+                "body": {
+                    "mode": "raw",
+                    "raw": "{\n    \"date\": \"{{bookingDate}}\",\n    \"slot\": \"11:00\"\n}"
+                },
+                "url": {
+                    "raw": "{{baseUrl}}/bookings/{{bookingId}}",
+                    "host": ["{{baseUrl}}"],
+                    "path": ["bookings", "{{bookingId}}"]
+                }
+            },
+            "event": [
+                {
+                    "listen": "test",
+                    "script": {
+                        "type": "text/javascript",
+                        "exec": [
+                            "pm.test('returns 409', function () {",
+                            "    pm.response.to.have.status(409);",
+                            "});",
+                            "",
+                            "pm.test('explains the slot is taken', function () {",
+                            "    pm.expect(pm.response.json().message).to.include('is already booked');",
+                            "});"
+                        ]
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Reschedule a booking to a free slot",
+            "request": {
+                "method": "PUT",
+                "header": [
+                    {
+                        "key": "Accept",
+                        "value": "application/json"
+                    },
+                    {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                    }
+                ],
+                "body": {
+                    "mode": "raw",
+                    "raw": "{\n    \"date\": \"{{rescheduleDate}}\",\n    \"slot\": \"16:00\"\n}"
+                },
+                "url": {
+                    "raw": "{{baseUrl}}/bookings/{{bookingId}}",
+                    "host": ["{{baseUrl}}"],
+                    "path": ["bookings", "{{bookingId}}"]
+                }
+            },
+            "event": [
+                {
+                    "listen": "test",
+                    "script": {
+                        "type": "text/javascript",
+                        "exec": [
+                            "pm.test('returns 200', function () {",
+                            "    pm.response.to.have.status(200);",
+                            "});",
+                            "",
+                            "const body = pm.response.json();",
+                            "",
+                            "pm.test('moves the same booking and keeps the email', function () {",
+                            "    pm.expect(body.id).to.eql(pm.collectionVariables.get('bookingId'));",
+                            "    pm.expect(body.date).to.eql(pm.collectionVariables.get('rescheduleDate'));",
+                            "    pm.expect(body.slot).to.eql('16:00');",
+                            "    pm.expect(body.email).to.eql('jane@example.com');",
+                            "});"
+                        ]
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Reschedule a booking with an invalid payload",
+            "request": {
+                "method": "PUT",
+                "header": [
+                    {
+                        "key": "Accept",
+                        "value": "application/json"
+                    },
+                    {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                    }
+                ],
+                "body": {
+                    "mode": "raw",
+                    "raw": "{\n    \"date\": \"{{rescheduleDate}}\"\n}"
+                },
+                "url": {
+                    "raw": "{{baseUrl}}/bookings/{{bookingId}}",
+                    "host": ["{{baseUrl}}"],
+                    "path": ["bookings", "{{bookingId}}"]
+                }
+            },
+            "event": [
+                {
+                    "listen": "test",
+                    "script": {
+                        "type": "text/javascript",
+                        "exec": [
+                            "pm.test('returns 422', function () {",
+                            "    pm.response.to.have.status(422);",
+                            "});",
+                            "",
+                            "pm.test('reports the missing slot', function () {",
+                            "    pm.expect(pm.response.json().errors).to.have.property('slot');",
+                            "});"
+                        ]
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Reschedule an unknown booking",
+            "request": {
+                "method": "PUT",
+                "header": [
+                    {
+                        "key": "Accept",
+                        "value": "application/json"
+                    },
+                    {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                    }
+                ],
+                "body": {
+                    "mode": "raw",
+                    "raw": "{\n    \"date\": \"{{rescheduleDate}}\",\n    \"slot\": \"15:00\"\n}"
+                },
+                "url": {
+                    "raw": "{{baseUrl}}/bookings/nonexistent-id-12345",
+                    "host": ["{{baseUrl}}"],
+                    "path": ["bookings", "nonexistent-id-12345"]
+                }
+            },
+            "event": [
+                {
+                    "listen": "test",
+                    "script": {
+                        "type": "text/javascript",
+                        "exec": [
+                            "pm.test('returns 404', function () {",
+                            "    pm.response.to.have.status(404);",
+                            "});",
+                            "",
+                            "pm.test('names the missing booking', function () {",
+                            "    pm.expect(pm.response.json().message).to.include('was not found');",
+                            "});"
+                        ]
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Cancel a booking",
+            "request": {
+                "method": "DELETE",
+                "header": [
+                    {
+                        "key": "Accept",
+                        "value": "application/json"
+                    }
+                ],
+                "url": {
+                    "raw": "{{baseUrl}}/bookings/{{bookingId}}",
+                    "host": ["{{baseUrl}}"],
+                    "path": ["bookings", "{{bookingId}}"]
+                }
+            },
+            "event": [
+                {
+                    "listen": "test",
+                    "script": {
+                        "type": "text/javascript",
+                        "exec": [
+                            "pm.test('returns 200', function () {",
+                            "    pm.response.to.have.status(200);",
+                            "});",
+                            "",
+                            "pm.test('confirms the cancellation', function () {",
+                            "    pm.expect(pm.response.json().message).to.eql('Booking cancelled.');",
+                            "});"
+                        ]
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Cancel the second booking (cleanup)",
+            "request": {
+                "method": "DELETE",
+                "header": [
+                    {
+                        "key": "Accept",
+                        "value": "application/json"
+                    }
+                ],
+                "url": {
+                    "raw": "{{baseUrl}}/bookings/{{secondBookingId}}",
+                    "host": ["{{baseUrl}}"],
+                    "path": ["bookings", "{{secondBookingId}}"]
+                }
+            },
+            "event": [
+                {
+                    "listen": "test",
+                    "script": {
+                        "type": "text/javascript",
+                        "exec": [
+                            "pm.test('returns 200', function () {",
+                            "    pm.response.to.have.status(200);",
+                            "});",
+                            "",
+                            "pm.test('confirms the cancellation', function () {",
+                            "    pm.expect(pm.response.json().message).to.eql('Booking cancelled.');",
+                            "});"
+                        ]
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Cancel an unknown booking",
+            "request": {
+                "method": "DELETE",
+                "header": [
+                    {
+                        "key": "Accept",
+                        "value": "application/json"
+                    }
+                ],
+                "url": {
+                    "raw": "{{baseUrl}}/bookings/nonexistent-id-12345",
+                    "host": ["{{baseUrl}}"],
+                    "path": ["bookings", "nonexistent-id-12345"]
+                }
+            },
+            "event": [
+                {
+                    "listen": "test",
+                    "script": {
+                        "type": "text/javascript",
+                        "exec": [
+                            "pm.test('returns 404', function () {",
+                            "    pm.response.to.have.status(404);",
+                            "});",
+                            "",
+                            "pm.test('names the missing booking', function () {",
+                            "    pm.expect(pm.response.json().message).to.include('was not found');",
+                            "});"
+                        ]
+                    }
+                }
+            ]
+        }
+    ]
+}

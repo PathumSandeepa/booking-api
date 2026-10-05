@@ -47,13 +47,13 @@ final class ListBookingsTest extends TestCase
     }
 
     #[Test]
-    public function it_returns_not_found_when_no_bookings_match_the_date(): void
+    public function it_returns_an_empty_list_when_no_bookings_match_the_date(): void
     {
         $date = CarbonImmutable::today()->addYear()->toDateString();
 
         $this->getJson('/bookings?date='.$date)
-            ->assertNotFound()
-            ->assertJsonPath('message', 'No bookings found for '.$date.'.');
+            ->assertOk()
+            ->assertExactJson([]);
     }
 
     #[Test]

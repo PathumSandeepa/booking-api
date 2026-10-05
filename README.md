@@ -64,7 +64,7 @@ Set a Postman collection variable `baseUrl` to `http://localhost:3000`. No autho
     Replace the example date with **today or any date within the next 90 days** when testing later. Slots are hourly from `09:00` through `17:00`.
 
 3. `GET {{baseUrl}}/bookings` → HTTP `200`, a plain JSON array containing your new booking.
-4. `GET {{baseUrl}}/bookings?date=2026-10-06` → HTTP `200` for a date that has bookings. The `date` query parameter is a plain string in `YYYY-MM-DD` (year-month-day) form, so `2026-10-06` means 6 October 2026. A valid date with no bookings returns `404`, and a wrong format such as `06-10-2026` returns `422`.
+4. `GET {{baseUrl}}/bookings?date=2026-10-06` → HTTP `200` for a date that has bookings. The `date` query parameter is a plain string in `YYYY-MM-DD` (year-month-day) form, so `2026-10-06` means 6 October 2026. A valid date with no bookings returns `200` with an empty array `[]`, and a wrong format such as `06-10-2026` returns `422`.
 5. `PUT {{baseUrl}}/bookings/<id>` → HTTP `200`. Body is just the new schedule: `{"date": "2026-10-08", "slot": "16:00"}`. Moving onto a slot another booking holds returns `409`.
 6. `DELETE {{baseUrl}}/bookings/<id>` → HTTP `200`, replacing `<id>` with the `id` from the POST response. Posting the same date and slot twice instead returns `409`; invalid input returns `422`.
 
@@ -103,7 +103,7 @@ Without Docker, drop the `docker compose exec app` prefix and run `php artisan t
 Tests run against an in-memory SQLite database, so they need no external services.
 
 - `tests/Feature/Booking/CreateBookingTest.php` — success, double-booking, same slot on another date, missing fields, past date, unknown slot, today, beyond the booking window.
-- `tests/Feature/Booking/ListBookingsTest.php` — list all, filter by date, empty result, malformed filter.
+- `tests/Feature/Booking/ListBookingsTest.php` — list all, filter by date, empty result (`200` with `[]`), malformed filter.
 - `tests/Feature/Booking/CancelBookingTest.php` — cancel, unknown id, slot freed after cancelling.
 - `tests/Feature/Booking/RescheduleBookingTest.php` — reschedule, name/email untouched, own slot allowed, conflict with another booking, old slot freed, unknown id, missing fields, past date, beyond window, unknown slot.
 - `tests/Feature/Booking/ConcurrentBookingTest.php` — the unique constraint, and two identical requests.
@@ -178,8 +178,7 @@ Validation failures use a generic top-level `message` and put the detail under `
 
 Optional `?date=YYYY-MM-DD` filter. Responses:
 
-- `200 OK` with bookings ordered by date then slot
-- `404 Not Found` when a valid date filter matches no bookings
+- `200 OK` with bookings ordered by date then slot, and an empty array `[]` when nothing matches, with or without the filter
 - `422 Unprocessable Content` when the filter is not a valid `YYYY-MM-DD` date
 
 Without a filter, an empty database returns `200` with `[]`.
@@ -197,10 +196,10 @@ Without a filter, an empty database returns `200` with `[]`.
 ]
 ```
 
-A date with no bookings returns `404`:
+A valid date with no bookings returns `200` with an empty array:
 
 ```json
-{ "message": "No bookings found for 2026-12-16." }
+[]
 ```
 
 A malformed filter such as `?date=15-12-2026` returns `422` and is logged as a warning:
@@ -269,7 +268,7 @@ Returns `200 OK` when the booking existed, `404 Not Found` otherwise:
 - Emails are lowercased and names trimmed before storage, so `Jane@Example.com` and `jane@example.com` are stored identically.
 - **Responses are unwrapped.** Creating returns the booking object, listing returns an array. There is no `data` envelope.
 - **Errors never repeat themselves.** Single-fault errors (`404`, `409`) return just a `message`. Validation failures (`422`) return a generic `message` plus an `errors` map, so the per-field detail appears once rather than being copied into the top-level message.
-- A `?date=` filter that matches nothing is treated as **not found** (`404`) rather than an empty list, so a client can tell "no bookings that day" apart from an unfiltered empty list. Listing without a filter still returns `200` with `[]`.
+- A `?date=` filter that matches nothing returns `200` with an empty array. An empty result is a valid answer to a list request, so it is not treated as an error, and it behaves the same as listing without a filter. `404` is used only when a booking id does not exist (`PUT` and `DELETE`).
 - There is no authentication; the endpoints are public and only rate limited (`BOOKING_RATE_LIMIT`, default 60 requests/minute).
 - Cancellation is a hard delete. There is no audit trail.
 
@@ -281,7 +280,7 @@ app/
     Actions/              CreateBookingAction, ListBookingsAction, RescheduleBookingAction, CancelBookingAction
     DataTransferObjects/  CreateBookingData, RescheduleBookingData
     Enums/                BookingSlot
-    Exceptions/           SlotAlreadyBookedException, BookingNotFoundException, NoBookingsForDateException
+    Exceptions/           SlotAlreadyBookedException, BookingNotFoundException
     Models/               Booking
     Repositories/         BookingRepository (interface)
   Infrastructure/Booking/
@@ -344,6 +343,17 @@ The unique index already makes the system _correct_ under load — it cannot dou
 - For a distributed deployment, a short-lived Redis lock keyed on `date:slot` would absorb the contention before it reaches the database.
 - Idempotency keys on `POST /bookings` so a client retry after a timeout does not create a second booking.
 
+## Beyond the brief
+
+These are additions rather than requirements; the brief did not ask for them.
+
+- `PUT /bookings/{id}` to reschedule a booking.
+- A 90-day booking window.
+- Rate limiting.
+- Request logging.
+- GitHub Actions CI (Pint + tests).
+- The Docker + PostgreSQL setup.
+
 ## What I would add with more time
 
 - Authentication and per-user ownership, so people can only cancel their own bookings.
@@ -385,7 +395,9 @@ The following scenarios can be tested against `http://localhost:3000` with Postm
 | 9   | Reschedule an unknown id                  | `404`  |
 | 10  | Delete existing booking                   | `200`  |
 | 11  | Delete unknown id                         | `404`  |
-| 12  | List filtered by a date with no bookings  | `404`  |
+| 12  | List filtered by a date with no bookings  | `200` with `[]` |
 | 13  | List filtered by a malformed date         | `422`  |
 
-For requests 7 and 10, copy the `id` from request 1's response into the URL. Run request 6 before request 10, because deleting the only booking for that date makes the filter return `404`.
+For requests 7 and 10, copy the `id` from request 1's response into the URL.
+
+A ready-made Postman collection is in the repo root: [Booking-API.postman_collection.json](Booking-API.postman_collection.json). It chains the ids automatically, generates dates relative to today so it never goes stale, and can be run start to finish with Postman's **Run Collection**.
