@@ -18,7 +18,6 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->api(prepend: [ForceJsonResponse::class]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        // Laravel repeats the first field error as the top-level message; keep it generic instead.
         $exceptions->render(fn (ValidationException $e, Request $request) => new JsonResponse([
             'message' => 'The given data was invalid.',
             'errors' => $e->errors(),
