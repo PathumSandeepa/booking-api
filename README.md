@@ -382,21 +382,21 @@ A few things that cost me time and are worth recording.
 
 The following scenarios can be tested against `http://localhost:3000` with Postman:
 
-| #   | Request                                   | Result |
-| --- | ----------------------------------------- | ------ |
-| 1   | Create booking                            | `201`  |
-| 2   | Conflicting date + slot                   | `409`  |
-| 3   | Missing / invalid fields                  | `422`  |
-| 4   | Date in the past                          | `422`  |
-| 5   | List all                                  | `200`  |
-| 6   | List filtered by a date that has bookings | `200`  |
-| 7   | Reschedule a booking                      | `200`  |
-| 8   | Reschedule onto a taken slot              | `409`  |
-| 9   | Reschedule an unknown id                  | `404`  |
-| 10  | Delete existing booking                   | `200`  |
-| 11  | Delete unknown id                         | `404`  |
+| #   | Request                                   | Result          |
+| --- | ----------------------------------------- | --------------- |
+| 1   | Create booking                            | `201`           |
+| 2   | Conflicting date + slot                   | `409`           |
+| 3   | Missing / invalid fields                  | `422`           |
+| 4   | Date in the past                          | `422`           |
+| 5   | List all                                  | `200`           |
+| 6   | List filtered by a date that has bookings | `200`           |
+| 7   | Reschedule a booking                      | `200`           |
+| 8   | Reschedule onto a taken slot              | `409`           |
+| 9   | Reschedule an unknown id                  | `404`           |
+| 10  | Delete existing booking                   | `200`           |
+| 11  | Delete unknown id                         | `404`           |
 | 12  | List filtered by a date with no bookings  | `200` with `[]` |
-| 13  | List filtered by a malformed date         | `422`  |
+| 13  | List filtered by a malformed date         | `422`           |
 
 For requests 7 and 10, copy the `id` from request 1's response into the URL.
 
